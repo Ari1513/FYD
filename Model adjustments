@@ -1,0 +1,10 @@
+Adjusting the Model
+Initial Conditions:
+Modify X0, S0, N0, etc. in the script to change the starting concentrations.
+Simulation Duration:
+Change t_final and dt to adjust the total simulation time or the step size.
+Feeding Threshold:
+Tweak feed_threshold in the simulate_with_feed(...) function to control how often feeding occurs.
+Environmental Conditions:
+CO2_star_array, O2_star_array: update arrays for dissolved CO2 or O2, update these arrays.
+effective_arrhenius_array, fI_values: data for temperature or light intensity
