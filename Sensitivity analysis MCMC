@@ -1,0 +1,210 @@
+import numpy as np
+import matplotlib.pyplot as plt
+
+# 1) Discrete contamination fractions up to 30%
+contamination_set = np.array([0.00, 0.05, 0.10, 0.15, 0.20, 0.25, 0.30])
+n_states = len(contamination_set)
+
+# 2) Transition matrix (7×7). Rows sum to 1.0
+#    P[i, j] = probability of going from fraction i to fraction j next month
+P = np.array([
+    # from 0%:
+    [0.40, 0.25, 0.15, 0.10, 0.05, 0.03, 0.02],
+    # from 5%:
+    [0.10, 0.40, 0.20, 0.15, 0.10, 0.03, 0.02],
+    # from 10%:
+    [0.05, 0.10, 0.40, 0.20, 0.15, 0.06, 0.04],
+    # from 15%:
+    [0.02, 0.05, 0.10, 0.40, 0.25, 0.10, 0.08],
+    # from 20%:
+    [0.01, 0.02, 0.05, 0.15, 0.40, 0.25, 0.12],
+    # from 25%:
+    [0.00, 0.02, 0.03, 0.10, 0.20, 0.40, 0.25],
+    # from 30%:
+    [0.00, 0.00, 0.02, 0.05, 0.10, 0.20, 0.63],
+])
+
+for i, row in enumerate(P):
+    row_sum = row.sum()
+    if not np.isclose(row_sum, 1.0, atol=1e-8):
+        print(f"Warning: row {i} sums to {row_sum:.3f} (should be 1.0)")
+
+#Ideal monthly yields (no contamination), from your table
+#    (in g/L for each of the 12 months)
+X_ideal = np.array([
+    69.322,  # Jan
+    8.627,   # Feb
+    77.320,  # Mar
+    43.119,  # Apr
+    41.198,  # May
+    9.721,   # Jun
+    8.382,   # Jul
+    20.624,  # Aug
+    72.872,  # Sep
+    61.816,  # Oct
+    85.335,  # Nov
+    37.035   # Dec
+])
+
+#Reactor setup & day scaling
+n_reactors = 16
+vol_per_reactor_m3 = 200
+total_volume_L = n_reactors * vol_per_reactor_m3 * 1000  # 3.2 million L
+
+days_full = 365
+days_operational = 300
+day_scale_factor = days_operational / days_full  # ~0.82
+
+production_target = 1181.0  # e.g. the required annual (300-day) target
+
+# 5) Monte Carlo simulation of 12-month Markov chain
+N = 100_000
+annual_yields = np.zeros(N)
+
+# Initial distribution: uniform chance of starting in each fraction state
+init_probs = np.full(n_states, 1.0 / n_states)
+
+for i in range(N):
+    # Pick initial contamination state
+    current_state_idx = np.random.choice(n_states, p=init_probs)
+    
+    # Accumulate yield over 12 months
+    sum_gL = 0.0
+    for m in range(12):
+        frac_m = contamination_set[current_state_idx]  # contamination fraction
+        # actual monthly yield:
+        sum_gL += (1.0 - frac_m) * X_ideal[m]
+        
+        # Next month's state
+        next_state_idx = np.random.choice(n_states, p=P[current_state_idx])
+        current_state_idx = next_state_idx
+    
+    # Convert g/L -> total grams -> tonnes -> scale from 365 to 300 days
+    total_g_365 = sum_gL * total_volume_L
+    total_tonnes_365 = total_g_365 / 1e6
+    total_tonnes_300 = total_tonnes_365 * day_scale_factor
+    
+    annual_yields[i] = total_tonnes_300
+
+
+mean_yield = np.mean(annual_yields)
+median_yield = np.median(annual_yields)
+p10 = np.percentile(annual_yields, 10)
+p90 = np.percentile(annual_yields, 90)
+min_val = np.min(annual_yields)
+max_val = np.max(annual_yields)
+prob_meet_target = np.mean(annual_yields >= production_target)*100
+print(f"Monte Carlo runs: {N}")
+print(f"Mean annual yield (300 days): {mean_yield:.1f} tonnes")
+print(f"Median yield: {median_yield:.1f} tonnes")
+print(f"10th percentile: {p10:.1f},  90th percentile: {p90:.1f}")
+print(f"Min: {min_val:.1f},  Max: {max_val:.1f}")
+print(f"Probability of meeting {production_target} tonnes: {prob_meet_target:.1f}%")
+
+#Plot distribution
+plt.hist(annual_yields, bins=30, alpha=0.9)
+plt.axvline(production_target, linestyle='--', color='red', label=f"Target={production_target}")
+plt.xlabel("Annual Yield (tonnes/year, 300 days)")
+plt.ylabel("Frequency")
+plt.title("Discrete MCMC: 0–30% Contamination")
+plt.legend(facecolor='ivory')
+plt.show()
+
+
+####
+import numpy as np
+import matplotlib.pyplot as plt
+
+contamination_set = np.array([0.00, 0.05, 0.10, 0.15, 0.20])
+n_states = len(contamination_set)
+
+# transition matrix (5×5)
+#    P[i, j] = probability of going from fraction i to fraction j next month
+P = np.array([
+    [0.42105263, 0.26315789, 0.15789474, 0.10526316, 0.05263158],  # from 0%
+    [0.10526316, 0.42105263, 0.21052632, 0.15789474, 0.10526316],  # from 5%
+    [0.05555556, 0.11111111, 0.44444444, 0.22222222, 0.16666667],  # from 10%
+    [0.02439024, 0.06097561, 0.12195122, 0.48780488, 0.30487805],  # from 15%
+    [0.01587302, 0.03174603, 0.07936508, 0.23809524, 0.63492063],  # from 20%
+])
+
+for i, row in enumerate(P):
+    row_sum = row.sum()
+    if not np.isclose(row_sum, 1.0, atol=1e-8):
+        print(f"Warning: row {i} sums to {row_sum:.3f} (should be 1.0)")
+
+X_ideal = np.array([
+    69.322,  # Jan
+    8.627,   # Feb
+    77.320,  # Mar
+    43.119,  # Apr
+    41.198,  # May
+    9.721,   # Jun
+    8.382,   # Jul
+    20.624,  # Aug
+    72.872,  # Sep
+    61.816,  # Oct
+    85.335,  # Nov
+    37.035   # Dec
+])
+
+
+n_reactors = 16
+vol_per_reactor_m3 = 200
+total_volume_L = n_reactors * vol_per_reactor_m3 * 1000  # 3.2 million L
+
+days_full = 365
+days_operational = 300
+day_scale_factor = days_operational / days_full  # ~0.82
+
+production_target = 1181.0  # e.g. the required annual (300-day) target
+
+
+N = 100_000
+annual_yields = np.zeros(N)
+init_probs = np.full(n_states, 1.0 / n_states)
+
+for i in range(N):
+    # Pick initial contamination state
+    current_state_idx = np.random.choice(n_states, p=init_probs)
+    
+    # Accumulate yield over 12 months
+    sum_gL = 0.0
+    for m in range(12):
+        frac_m = contamination_set[current_state_idx]  # contamination fraction
+        # actual monthly yield:
+        sum_gL += (1.0 - frac_m) * X_ideal[m]
+        
+        # Next month's state
+        current_state_idx = np.random.choice(n_states, p=P[current_state_idx])
+    
+    # Convert g/L -> total grams -> tonnes -> scale from 365 to 300 days
+    total_g_365 = sum_gL * total_volume_L
+    total_tonnes_365 = total_g_365 / 1e6
+    total_tonnes_300 = total_tonnes_365 * day_scale_factor
+    
+    annual_yields[i] = total_tonnes_300
+
+mean_yield = np.mean(annual_yields)
+median_yield = np.median(annual_yields)
+p10 = np.percentile(annual_yields, 10)
+p90 = np.percentile(annual_yields, 90)
+min_val = np.min(annual_yields)
+max_val = np.max(annual_yields)
+
+prob_meet_target = np.mean(annual_yields >= production_target)*100
+
+print(f"Monte Carlo runs: {N}")
+print(f"Mean annual yield (300 days): {mean_yield:.1f} tonnes")
+print(f"Median yield: {median_yield:.1f} tonnes")
+print(f"10th percentile: {p10:.1f},  90th percentile: {p90:.1f}")
+print(f"Min: {min_val:.1f},  Max: {max_val:.1f}")
+print(f"Probability of meeting {production_target} tonnes: {prob_meet_target:.1f}%")
+
+plt.hist(annual_yields, bins=30, alpha=0.9)
+plt.axvline(production_target, linestyle='--', color='red', label=f"Target={production_target}")
+plt.xlabel("Annual Yield (tonnes/year, 300 days)")
+plt.ylabel("Frequency")
+plt.title("Discrete MCMC: 0–20% Contamination")
+plt.legend(facecolor='ivory')
+plt.show()
